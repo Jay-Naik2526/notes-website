@@ -135,11 +135,11 @@ function toPdf(src, id) {
 	return job;
 }
 
-/** Copy the (converted) PDF next to the packs so friends can download the original. Skips files over Cloudflare's 25 MB limit. */
+/** Copy the (converted) PDF next to the packs so friends can download the original. Limit 90 MB (GitHub Pages allows up to 100 MB). */
 async function copyOrig(id, pdf) {
 	try {
 		const st = await stat(pdf);
-		if (st.size > 24 * 1048576) return false;
+		if (st.size > 90 * 1048576) return false;
 		await mkdir(join(OUT, 'orig'), { recursive: true });
 		await copyFile(pdf, join(OUT, 'orig', `${id}.pdf`));
 		return true;

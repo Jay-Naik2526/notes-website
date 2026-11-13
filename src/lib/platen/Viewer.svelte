@@ -10,6 +10,9 @@
 		initialPage = 0,
 		tool = 'off',
 		color = 'y',
+		inFull = false,
+		presentation = false,
+		spread = false,
 		onpage,
 		onzoom
 	}: {
@@ -19,6 +22,9 @@
 		/** pen tool: draw highlights, drop sticky notes, or none (plain reading) */
 		tool?: 'off' | 'highlight' | 'note';
 		color?: MarkColor;
+		inFull?: boolean;
+		presentation?: boolean;
+		spread?: boolean;
 		onpage?: (i: number) => void;
 		onzoom?: (z: number) => void;
 	} = $props();
@@ -40,25 +46,53 @@
 	/** scroll position relative to the page stack */
 	const sy = () => window.scrollY - offset;
 
-	let vw = $state(window.innerWidth);
-	let vh = $state(window.innerHeight);
+	let vw = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
+	let vh = $state(typeof window !== 'undefined' ? window.innerHeight : 768);
 	let zoom = $state(1);
 	let pinch = $state(1); // native pinch-zoom factor from visualViewport
-	const dpr = window.devicePixelRatio || 1;
+	const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-	const gap = $derived(vw < 640 ? 10 : 18);
-	// slides are landscape: let them use more of a wide screen
 	// svelte-ignore state_referenced_locally
-	const maxW = manifest.ar[0] < 0.9 ? 1040 : 860;
-	const pageW = $derived(Math.min(vw - GUTTER * 2, maxW) * zoom);
+	const isSlides = manifest.ar[0] < 0.9;
+	const gap = $derived(vw < 640 ? 10 : 18);
+	const maxW = isSlides ? 1040 : 860;
+
+	// In slide presentation mode, fit height so the whole slide is visible
+	const slideFitW = $derived((vh - (inFull ? 32 : 88)) / manifest.ar[0]);
+	const pageW = $derived.by(() => {
+		if (presentation && isSlides) {
+			return Math.min(vw - GUTTER * 2, slideFitW) * zoom;
+		}
+		if (spread && !isSlides && vw >= 1100) {
+			return Math.min((vw - GUTTER * 3) / 2, 620) * zoom;
+		}
+		return Math.min(vw - GUTTER * 2, maxW) * zoom;
+	});
 	const layout = $derived.by(() => {
 		const tops: number[] = new Array(n);
-		let y = TOP_PAD;
-		for (let i = 0; i < n; i++) {
-			tops[i] = y;
-			y += pageW * manifest.ar[i] + gap;
+		const lefts: number[] = new Array(n);
+		let y = inFull ? 16 : TOP_PAD;
+		if (spread && !isSlides && vw >= 1100) {
+			for (let i = 0; i < n; i += 2) {
+				tops[i] = y;
+				lefts[i] = -1;
+				const h0 = pageW * manifest.ar[i];
+				let h1 = 0;
+				if (i + 1 < n) {
+					tops[i + 1] = y;
+					lefts[i + 1] = 1;
+					h1 = pageW * manifest.ar[i + 1];
+				}
+				y += Math.max(h0, h1) + gap;
+			}
+		} else {
+			for (let i = 0; i < n; i++) {
+				tops[i] = y;
+				lefts[i] = 0;
+				y += pageW * manifest.ar[i] + (presentation && isSlides ? Math.max(gap, vh - pageW * manifest.ar[i]) : gap);
+			}
 		}
-		return { tops, total: y + 96 };
+		return { tops, lefts, total: y + (inFull ? 40 : 96) };
 	});
 	// Only ask for the 2x tier when the screen can actually show the extra pixels.
 	const hiNeeded = $derived(pageW * dpr * pinch > manifest.md.w * 1.3);
@@ -183,7 +217,31 @@
 	}
 	export function goToPage(i: number) {
 		i = Math.min(n - 1, Math.max(0, i));
-		window.scrollTo(window.scrollX, offset + layout.tops[i] - CHROME - BREATH);
+		const topPad = inFull ? (presentation && isSlides ? Math.max(12, (vh - pageW * manifest.ar[i]) / 2) : 14) : CHROME + BREATH;
+		window.scrollTo(window.scrollX, offset + layout.tops[i] - topPad);
+	}
+	export function nextPage() {
+		goToPage(current + 1);
+	}
+	export function prevPage() {
+		goToPage(current - 1);
+	}
+
+	let touchStartX = 0;
+	let touchStartY = 0;
+	function onTouchStart(e: TouchEvent) {
+		if (tool !== 'off') return;
+		touchStartX = e.changedTouches[0].clientX;
+		touchStartY = e.changedTouches[0].clientY;
+	}
+	function onTouchEnd(e: TouchEvent) {
+		if (tool !== 'off') return;
+		const dx = e.changedTouches[0].clientX - touchStartX;
+		const dy = e.changedTouches[0].clientY - touchStartY;
+		if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+			if (dx < 0) nextPage();
+			else prevPage();
+		}
 	}
 
 	// ---------- annotations ----------
@@ -259,8 +317,8 @@
 		if (e.key === '+' || e.key === '=') zoomBy(1.15);
 		else if (e.key === '-') zoomBy(1 / 1.15);
 		else if (e.key === '0') setZoom(1);
-		else if (e.key === 'ArrowRight' || e.key === 'j') goToPage(current + 1);
-		else if (e.key === 'ArrowLeft' || e.key === 'k') goToPage(current - 1);
+		else if (e.key === 'ArrowRight' || e.key === 'j' || (presentation && e.key === ' ')) goToPage(current + 1);
+		else if (e.key === 'ArrowLeft' || e.key === 'k' || (presentation && e.key === ' ' && e.shiftKey)) goToPage(current - 1);
 		else return;
 		e.preventDefault();
 	}
@@ -300,7 +358,16 @@
 
 <svelte:window onscroll={onScroll} onresize={onResize} onkeydown={onKey} />
 
-<div class="stage" bind:this={stageEl} style:height="{layout.total}px" style:width="max(100%, {pageW + GUTTER * 2}px)" role="document" aria-label="Document pages">
+<div
+	class="stage"
+	bind:this={stageEl}
+	style:height="{layout.total}px"
+	style:width="max(100%, {pageW + GUTTER * 2}px)"
+	role="document"
+	aria-label="Document pages"
+	ontouchstart={onTouchStart}
+	ontouchend={onTouchEnd}
+>
 	{#each range as i (i)}
 		{@const src = urls['hi:' + i] ?? urls['md:' + i]}
 		{@const ear = app.hasEar(docId, i)}
@@ -313,7 +380,7 @@
 			data-tool={tool}
 			style:width="{pageW}px"
 			style:height="{pageW * manifest.ar[i]}px"
-			style:transform="translate3d(-50%, {layout.tops[i]}px, 0)"
+			style:transform="translate3d({layout.lefts[i] === -1 ? 'calc(-100% - ' + (gap / 2) + 'px)' : layout.lefts[i] === 1 ? (gap / 2) + 'px' : '-50%'}, {layout.tops[i]}px, 0)"
 			onpointerdown={(e) => pdown(e, i)}
 			onclick={(e) => pclick(e, i)}
 			onpointermove={pmove}

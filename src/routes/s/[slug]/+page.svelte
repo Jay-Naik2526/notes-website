@@ -43,19 +43,34 @@
 				<ol>
 					{#each g.docs as d, n (d.id)}
 						{@const st = app.status(d.id, d.pages)}
-						<li>
-							<a href="/read/{d.id}" data-sveltekit-preload-data="tap" data-sveltekit-reset="false">
-								<span class="q">Q{n + 1}</span>
-								<span class="b" data-s={st} role="img" aria-label={st === 2 ? 'finished' : st === 1 ? 'started' : 'not opened'}></span>
-								<span class="t">
-									<span class="title">{d.title}</span>
-									<span class="m">
-										{d.pages} {d.kind === 'slides' ? 'slides' : 'pages'} · {mb(d.bytes)} MB
-										{#if st === 1 && app.last[d.id]}<em>resume p.{app.last[d.id] + 1}</em>{/if}
+						<li class="row-item">
+							<div class="row">
+								<a class="row-main" href="/read/{d.id}" data-sveltekit-preload-data="tap" data-sveltekit-reset="false">
+									<span class="q">Q{n + 1}</span>
+									<span class="b" data-s={st} role="img" aria-label={st === 2 ? 'finished' : st === 1 ? 'started' : 'not opened'}></span>
+									<span class="t">
+										<span class="title">{d.title}</span>
+										<span class="m">
+											{d.pages} {d.kind === 'slides' ? 'slides' : 'pages'} · {mb(d.bytes)} MB
+											{#if st === 1 && app.last[d.id]}<em>resume p.{app.last[d.id] + 1}</em>{/if}
+										</span>
 									</span>
-								</span>
-								<span class="go" aria-hidden="true">→</span>
-							</a>
+									<span class="go" aria-hidden="true">→</span>
+								</a>
+								<a
+									class="row-dl"
+									href="/lib/orig/{d.id}.pdf"
+									download="{d.title}.pdf"
+									title="Download original {d.kind === 'slides' ? 'deck' : 'PDF'}"
+									aria-label="Download {d.title}"
+								>
+									<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+										<polyline points="7 10 12 15 17 10" />
+										<line x1="12" y1="15" x2="12" y2="3" />
+									</svg>
+								</a>
+							</div>
 						</li>
 					{/each}
 				</ol>
@@ -180,19 +195,28 @@
 		padding: 0;
 		list-style: none;
 	}
-	li a {
+	.row {
+		position: relative;
+		display: flex;
+		align-items: stretch;
+		border-bottom: 1px dashed rgb(0 0 0 / 0.25);
+	}
+	.row-main {
+		flex: 1;
+		min-width: 0;
 		position: relative;
 		display: grid;
 		grid-template-columns: 34px 24px 1fr auto;
 		align-items: center;
 		gap: 10px;
 		padding: 13px 6px;
-		border-bottom: 1px dashed rgb(0 0 0 / 0.25);
 		isolation: isolate;
 		touch-action: manipulation;
+		color: inherit;
+		text-decoration: none;
 	}
 	/* highlighter swipe, transform only */
-	li a::before {
+	.row-main::before {
 		content: '';
 		position: absolute;
 		inset: 6px -4px;
@@ -205,15 +229,37 @@
 		transition: transform 280ms var(--ease-out);
 	}
 	@media (hover: hover) {
-		li a:hover::before {
+		.row-main:hover::before {
 			transform: scaleX(1);
 		}
-		li a:hover .go {
+		.row-main:hover .go {
 			transform: translateX(4px);
 		}
 	}
-	li a:active::before {
+	.row-main:active::before {
 		transform: scaleX(1);
+	}
+	.row-dl {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 12px;
+		margin-left: 2px;
+		color: var(--pencil);
+		opacity: 0.65;
+		transition: opacity 150ms ease, transform 150ms ease, color 150ms ease;
+		touch-action: manipulation;
+		text-decoration: none;
+	}
+	@media (hover: hover) {
+		.row-dl:hover {
+			opacity: 1;
+			color: var(--ink);
+			transform: scale(1.15);
+		}
+	}
+	.row-dl:active {
+		transform: scale(0.92);
 	}
 	.q {
 		font-size: 15px;

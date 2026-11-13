@@ -16,7 +16,22 @@ npm run build     # static site into ./build
 Subjects and their folder colours live in `scripts/subjects.json`. Set the exam date in `src/lib/config.ts`.
 PPT/PPTX/DOC/DOCX files need LibreOffice installed (`brew install --cask libreoffice`).
 
-## Deploy free on Cloudflare Pages
+## Deploy to GitHub Pages
+
+GitHub Pages serves the pre-rendered notes using standard HTTP Range requests (`206 Partial Content`), completely free with no bandwidth limits.
+
+```bash
+# 1. Rebuild library and production bundle
+npm run library
+npm run build
+
+# 2. Deploy to GitHub Pages (.deploy repo)
+python3 scripts/push-batches.py
+```
+
+The `push-batches.py` script automatically stages app files and page packs, pushes them in small ~15–20 MB batches to avoid GitHub's HTTP timeouts on slow connections, and verifies the deploy.
+
+## Deploy free on Cloudflare Pages (alternative)
 
 ```bash
 npm run library && npm run build

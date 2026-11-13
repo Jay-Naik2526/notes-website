@@ -133,19 +133,121 @@
 		}
 	});
 
+	// ---------- full-screen & immersive reader ----------
+	let isFullscreen = $state(false);
+	let isImmersive = $state(false);
+	const inFull = $derived(isFullscreen || isImmersive);
+	// svelte-ignore state_referenced_locally
+	let presentation = $state(doc.kind === 'slides');
+	let spread = $state(false);
+
+	let barVisible = $state(true);
+	let barTimer: ReturnType<typeof setTimeout>;
+	let isBarHovered = $state(false);
+
+	function wakeBar() {
+		barVisible = true;
+		clearTimeout(barTimer);
+		if (inFull && !isBarHovered && !menu && !drawer && !penOpen && !editing) {
+			barTimer = setTimeout(() => {
+				if (!isBarHovered && !menu && !drawer && !penOpen && !editing) {
+					barVisible = false;
+				}
+			}, 3200);
+		}
+	}
+
+	async function toggleFullscreen() {
+		menu = false;
+		if (inFull) {
+			if (typeof document !== 'undefined' && document.fullscreenElement) {
+				await document.exitFullscreen().catch(() => {});
+			}
+			isFullscreen = false;
+			isImmersive = false;
+			barVisible = true;
+			clearTimeout(barTimer);
+		} else {
+			if (typeof document !== 'undefined' && document.documentElement.requestFullscreen) {
+				try {
+					await document.documentElement.requestFullscreen();
+					isFullscreen = true;
+				} catch {
+					isImmersive = true;
+				}
+			} else {
+				isImmersive = true;
+			}
+			barVisible = true;
+			wakeBar();
+			// Mobile landscape support for slides
+			if (doc.kind === 'slides' && typeof screen !== 'undefined' && 'orientation' in screen && 'lock' in screen.orientation) {
+				try {
+					// @ts-ignore
+					await screen.orientation.lock('landscape').catch(() => {});
+				} catch {}
+			}
+		}
+	}
+
+	function onFsChange() {
+		isFullscreen = !!(typeof document !== 'undefined' && document.fullscreenElement);
+		if (!isFullscreen && !isImmersive) {
+			barVisible = true;
+			clearTimeout(barTimer);
+		}
+	}
+
+	// Mobile orientation check for landscape hint
+	let isMobilePortrait = $state(false);
+	let dismissLandscape = $state(false);
+	function checkOrientation() {
+		if (typeof window !== 'undefined') {
+			isMobilePortrait = window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+		}
+	}
+	$effect(() => {
+		checkOrientation();
+	});
+
 	function onKey(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
-			menu = false;
-			drawer = null;
+			if (menu) {
+				menu = false;
+				return;
+			}
+			if (drawer) {
+				drawer = null;
+				return;
+			}
+			if (penOpen) {
+				penOpen = false;
+				return;
+			}
+			if (inFull) {
+				toggleFullscreen();
+				return;
+			}
 			return;
 		}
 		const t = e.target as HTMLElement;
 		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
-		if (e.key === 'b') toggleEar();
+		if (e.key === 'f' || e.key === 'F') {
+			e.preventDefault();
+			toggleFullscreen();
+		} else if (e.key === 'b') toggleEar();
 		else if (e.key === 't') drawer = drawer ? null : 'contents';
 		else if (e.key === 'h') togglePen();
 		else if (e.key === 'm') toggleNight();
+		else if (e.key === 'p') {
+			if (doc.kind === 'slides') presentation = !presentation;
+			else spread = !spread;
+		} else if (e.key === 'ArrowRight' || (doc.kind === 'slides' && e.key === ' ')) {
+			viewer?.nextPage();
+		} else if (e.key === 'ArrowLeft' || (doc.kind === 'slides' && e.key === ' ' && e.shiftKey)) {
+			viewer?.prevPage();
+		}
 	}
 </script>
 
@@ -154,51 +256,142 @@
 <svelte:window
 	onkeydown={onKey}
 	onpointerdown={(e) => {
+		wakeBar();
 		if (menu && !(e.target as HTMLElement).closest('.more')) menu = false;
 	}}
+	onpointermove={wakeBar}
+	ontouchstart={wakeBar}
+	onfullscreenchange={onFsChange}
+	onresize={checkOrientation}
 />
 
-<header class="bar">
-	<a class="back" href="/s/{data.subject.slug}" aria-label="Back to {data.subject.name}">←</a>
-	<button class="ib" onclick={() => (drawer = 'contents')} aria-label="Contents, dog-ears and notes" title="Contents (t)">☰</button>
+<div class="read-container" class:immersive-mode={isImmersive}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<header
+	class="bar"
+	class:floating={inFull}
+	class:hidden={inFull && !barVisible}
+	onmouseenter={() => {
+		isBarHovered = true;
+		wakeBar();
+	}}
+	onmouseleave={() => {
+		isBarHovered = false;
+		wakeBar();
+	}}
+>
+	{#if inFull}
+		<button class="ib fs-btn" onclick={toggleFullscreen} aria-label="Exit full screen" title="Exit full screen (f / Esc)">
+			<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="4 14 10 14 10 20" />
+				<polyline points="20 10 14 10 14 4" />
+				<line x1="14" y1="10" x2="21" y2="3" />
+				<line x1="3" y1="21" x2="10" y2="14" />
+			</svg>
+		</button>
+	{:else}
+		<a class="back" href="/s/{data.subject.slug}" aria-label="Back to {data.subject.name}">←</a>
+	{/if}
+	<button class="ib" onclick={() => { drawer = drawer ? null : 'contents'; wakeBar(); }} aria-label="Contents, dog-ears and notes" title="Contents (t)">☰</button>
 	<div class="title">
 		<span class="subj">{data.subject.name}{#if app.timer}<span class="tm" class:brk={app.timer.phase === 'break'}> · ☕ {pomo.clock}</span>{/if}</span>
 		<span class="doc">{doc.title}</span>
 	</div>
 
-	<div class="pg">
-		<input
-			inputmode="numeric"
-			aria-label="Go to page"
-			value={editing ? jump : cur + 1}
-			onfocus={(e) => {
-				editing = true;
-				jump = '';
-				e.currentTarget.select();
-			}}
-			oninput={(e) => (jump = e.currentTarget.value)}
-			onblur={() => (editing = false)}
-			onkeydown={(e) => {
-				if (e.key === 'Enter') {
-					commitJump();
-					e.currentTarget.blur();
-				}
-			}}
-		/>
-		<span>/ {n}</span>
-	</div>
+	{#if doc.kind === 'slides'}
+		<div class="slide-nav">
+			<button class="nav-arrow" onclick={() => { viewer?.prevPage(); wakeBar(); }} disabled={cur === 0} aria-label="Previous slide">‹</button>
+			<div class="pg">
+				<input
+					inputmode="numeric"
+					aria-label="Go to slide"
+					value={editing ? jump : cur + 1}
+					onfocus={(e) => {
+						editing = true;
+						jump = '';
+						e.currentTarget.select();
+					}}
+					oninput={(e) => (jump = e.currentTarget.value)}
+					onblur={() => (editing = false)}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							commitJump();
+							e.currentTarget.blur();
+						}
+					}}
+				/>
+				<span>/ {n}</span>
+			</div>
+			<button class="nav-arrow" onclick={() => { viewer?.nextPage(); wakeBar(); }} disabled={cur >= n - 1} aria-label="Next slide">›</button>
+		</div>
+	{:else}
+		<div class="pg">
+			<input
+				inputmode="numeric"
+				aria-label="Go to page"
+				value={editing ? jump : cur + 1}
+				onfocus={(e) => {
+					editing = true;
+					jump = '';
+					e.currentTarget.select();
+				}}
+				oninput={(e) => (jump = e.currentTarget.value)}
+				onblur={() => (editing = false)}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						commitJump();
+						e.currentTarget.blur();
+					}
+				}}
+			/>
+			<span>/ {n}</span>
+		</div>
+	{/if}
 
-	<button class="ib wide" class:lit={penOpen} onclick={togglePen} aria-pressed={penOpen} aria-label="Highlighter and notes" title="Highlight & notes (h)">✎</button>
-	<button class="ib" onclick={() => (app.searchOpen = true)} aria-label="Search all notes" title="Search (/)">⌕</button>
-	<button class="ib wide" class:lit={app.night} onclick={toggleNight} aria-pressed={app.night} aria-label="3 AM reading mode" title="3 AM mode (m)">☾</button>
+	<button class="ib wide" class:lit={penOpen} onclick={() => { togglePen(); wakeBar(); }} aria-pressed={penOpen} aria-label="Highlighter and notes" title="Highlight & notes (h)">✎</button>
+	<button class="ib" onclick={() => { app.searchOpen = true; wakeBar(); }} aria-label="Search all notes" title="Search (/)">⌕</button>
+	<button class="ib wide" class:lit={app.night} onclick={() => { toggleNight(); wakeBar(); }} aria-pressed={app.night} aria-label="3 AM reading mode" title="3 AM mode (m)">☾</button>
+
+	{#if doc.orig}
+		<a
+			class="ib dl"
+			href="/lib/orig/{doc.id}.pdf"
+			download="{doc.title}.pdf"
+			aria-label="Download original {doc.kind === 'slides' ? 'deck' : 'PDF'}"
+			title="Download original ({doc.kind === 'slides' ? 'deck' : 'PDF'})"
+		>
+			<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+				<polyline points="7 10 12 15 17 10" />
+				<line x1="12" y1="15" x2="12" y2="3" />
+			</svg>
+		</a>
+	{/if}
+
+	{#if !inFull}
+		<button class="ib fs-btn" onclick={toggleFullscreen} aria-label="Full screen reader" title="Full screen (f)">
+			<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="15 3 21 3 21 9" />
+				<polyline points="9 21 3 21 3 15" />
+				<line x1="21" y1="3" x2="14" y2="10" />
+				<line x1="3" y1="21" x2="10" y2="14" />
+			</svg>
+		</button>
+	{/if}
 
 	<div class="more">
-		<button class="ib" onclick={() => (menu = !menu)} aria-label="More actions" aria-expanded={menu}>⋯</button>
+		<button class="ib" onclick={() => { menu = !menu; wakeBar(); }} aria-label="More actions" aria-expanded={menu}>⋯</button>
 		{#if menu}
 			<div class="menu" role="menu">
 				<button role="menuitem" onclick={toggleEar}>{eared ? 'Remove dog-ear' : 'Dog-ear this page'} <kbd>b</kbd></button>
 				<button role="menuitem" onclick={togglePen}>{penOpen ? 'Close highlighter' : 'Highlight & sticky notes'} <kbd>h</kbd></button>
 				<button role="menuitem" onclick={toggleNight}>{app.night ? 'Back to daylight' : '3 AM mode'} <kbd>m</kbd></button>
+				<button role="menuitem" onclick={toggleFullscreen}>{inFull ? 'Exit full screen' : 'Full screen reader'} <kbd>f</kbd></button>
+				{#if doc.kind === 'slides'}
+					<button role="menuitem" onclick={() => { presentation = !presentation; menu = false; }}>{presentation ? 'Continuous scroll' : 'Presentation mode'} <kbd>p</kbd></button>
+				{:else}
+					<button role="menuitem" onclick={() => { spread = !spread; menu = false; }}>{spread ? 'Single page' : 'Two-page spread'} <kbd>p</kbd></button>
+				{/if}
 				<button role="menuitem" onclick={share}>Share this page</button>
 				<button role="menuitem" onclick={copyText}>Copy this page's text</button>
 				{#if doc.orig}
@@ -209,9 +402,9 @@
 	</div>
 
 	<div class="zoom">
-		<button onclick={() => viewer?.zoomBy(1 / 1.2)} aria-label="Zoom out">−</button>
-		<button class="pct" onclick={() => viewer?.setZoom(1)} aria-label="Reset zoom">{zoomPct}%</button>
-		<button onclick={() => viewer?.zoomBy(1.2)} aria-label="Zoom in">+</button>
+		<button onclick={() => { viewer?.zoomBy(1 / 1.2); wakeBar(); }} aria-label="Zoom out">−</button>
+		<button class="pct" onclick={() => { viewer?.setZoom(1); wakeBar(); }} aria-label="Reset zoom">{zoomPct}%</button>
+		<button onclick={() => { viewer?.zoomBy(1.2); wakeBar(); }} aria-label="Zoom in">+</button>
 	</div>
 
 	<span class="tape" style:transform="scaleX({(cur + 1) / n})" aria-hidden="true"></span>
@@ -289,6 +482,19 @@
 	</aside>
 {/if}
 
+{#if doc.kind === 'slides' && isMobilePortrait && !dismissLandscape}
+	<aside class="landscape-hint" role="status">
+		<span>↻ Rotate to landscape for full screen slides</span>
+		<button class="lh-close" onclick={() => (dismissLandscape = true)} aria-label="Dismiss">✕</button>
+	</aside>
+{/if}
+
+{#if inFull}
+	<div class="fs-tape-container" aria-hidden="true">
+		<span class="tape fs-tape" style:transform="scaleX({(cur + 1) / n})"></span>
+	</div>
+{/if}
+
 {#key doc.id}
 	<Viewer
 		bind:this={viewer}
@@ -297,12 +503,33 @@
 		initialPage={initial}
 		tool={penOpen ? tool : 'off'}
 		{color}
+		{inFull}
+		{presentation}
+		{spread}
 		{onpage}
 		onzoom={(z) => (zoomPct = Math.round(z * 100))}
 	/>
 {/key}
+</div>
 
 <style>
+	.read-container {
+		min-height: 100vh;
+	}
+	.read-container.immersive-mode {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		height: 100dvh;
+		width: 100vw;
+		background: var(--bg);
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+	:global(html:has(.immersive-mode)) {
+		overflow: hidden;
+	}
+
 	.bar {
 		position: sticky;
 		top: 0;
@@ -314,6 +541,118 @@
 		padding: env(safe-area-inset-top) 8px 0 6px;
 		background: rgb(23 18 14 / 0.94);
 		border-bottom: 1px solid rgb(236 227 205 / 0.1);
+	}
+	.bar.floating {
+		position: fixed;
+		top: 14px;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 60;
+		max-width: min(94vw, 840px);
+		border-radius: 9999px;
+		padding: 4px 14px;
+		background: rgb(23 18 14 / 0.88);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+		box-shadow:
+			0 8px 32px rgb(0 0 0 / 0.55),
+			0 0 0 1px rgb(236 227 205 / 0.12);
+		transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+	}
+	.bar.floating.hidden {
+		opacity: 0;
+		transform: translate(-50%, -16px);
+		pointer-events: none;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.bar.floating {
+			transition: none;
+		}
+	}
+
+	.ib.dl, .ib.fs-btn {
+		display: inline-grid;
+		place-items: center;
+		color: var(--paper);
+		text-decoration: none;
+	}
+	.ib.dl:hover, .ib.fs-btn:hover {
+		color: #fff;
+		transform: scale(1.08);
+	}
+
+	.slide-nav {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+	.nav-arrow {
+		background: none;
+		border: none;
+		color: var(--pencil);
+		font-size: 20px;
+		line-height: 1;
+		padding: 2px 6px;
+		cursor: pointer;
+		border-radius: 4px;
+		touch-action: manipulation;
+	}
+	.nav-arrow:hover:not(:disabled) {
+		color: var(--paper);
+		background: rgb(236 227 205 / 0.1);
+	}
+	.nav-arrow:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+
+	.fs-tape-container {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: rgb(0 0 0 / 0.3);
+		z-index: 55;
+		pointer-events: none;
+	}
+	.fs-tape {
+		position: absolute;
+		inset: 0;
+		background: var(--hl);
+		transform-origin: left;
+		transition: transform 120ms linear;
+	}
+
+	.landscape-hint {
+		position: fixed;
+		bottom: 24px;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 70;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 8px 16px;
+		background: rgb(23 18 14 / 0.92);
+		color: var(--paper);
+		font-family: var(--type);
+		font-size: 13px;
+		border: 1px solid var(--pencil);
+		border-radius: 9999px;
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.6);
+		white-space: nowrap;
+	}
+	.lh-close {
+		background: none;
+		border: none;
+		color: var(--pencil);
+		font-size: 14px;
+		cursor: pointer;
+		padding: 0 4px;
+	}
+	.lh-close:hover {
+		color: var(--paper);
 	}
 	.back {
 		display: grid;
