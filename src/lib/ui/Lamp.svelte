@@ -81,7 +81,7 @@
 
 		function frame(now: number) {
 			raf = 0;
-			if (document.hidden || mode !== 'follow') return;
+			if (document.hidden || mode !== 'follow' || coarse) return;
 			const idle = now - lastMove > 3500;
 			if (idle && alive) {
 				// nobody is steering: let the lamp sway like it is on a flexible arm (30fps is plenty)
@@ -100,6 +100,7 @@
 			else if (Math.abs(tx - x) > 0.4 || Math.abs(ty - y) > 0.4) raf = requestAnimationFrame(frame);
 		}
 		const kick = () => {
+			if (coarse) return; // on mobile/touch screens, lamp is static to ensure 60fps scrolling
 			if (!raf) raf = requestAnimationFrame(frame);
 		};
 		restart = kick;

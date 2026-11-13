@@ -235,9 +235,17 @@
 		.row-main:hover .go {
 			transform: translateX(4px);
 		}
-	}
-	.row-main:active::before {
-		transform: scaleX(1);
+		.row-main:active::before {
+			transform: scaleX(1);
+		}
+		.row-dl:hover {
+			opacity: 1;
+			color: var(--ink);
+			transform: scale(1.15);
+		}
+		.row-dl:active {
+			transform: scale(0.92);
+		}
 	}
 	.row-dl {
 		display: inline-flex;
@@ -250,16 +258,6 @@
 		transition: opacity 150ms ease, transform 150ms ease, color 150ms ease;
 		touch-action: manipulation;
 		text-decoration: none;
-	}
-	@media (hover: hover) {
-		.row-dl:hover {
-			opacity: 1;
-			color: var(--ink);
-			transform: scale(1.15);
-		}
-	}
-	.row-dl:active {
-		transform: scale(0.92);
 	}
 	.q {
 		font-size: 15px;
@@ -304,6 +302,15 @@
 	.go {
 		font-size: 20px;
 		transition: transform 200ms var(--ease-out);
+	}
+	@media (max-width: 600px) {
+		.paper::before {
+			display: none;
+		}
+		.paper {
+			box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+			padding: 24px 14px 20px;
+		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		li a::before,

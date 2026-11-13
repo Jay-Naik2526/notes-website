@@ -222,6 +222,12 @@
 			width: 9px;
 			height: 9px;
 		}
+		.front::before {
+			display: none;
+		}
+		.back {
+			box-shadow: 0 6px 14px rgb(0 0 0 / 0.35);
+		}
 	}
 
 	@media (hover: hover) {
@@ -234,10 +240,10 @@
 		.folder:hover .s2 {
 			transform: translateY(-8px) rotate(1.6deg);
 		}
-	}
-	.folder:active {
-		transform: translateY(var(--drop)) rotate(var(--rot)) scale(0.985);
-		transition-duration: 90ms;
+		.folder:active {
+			transform: translateY(var(--drop)) rotate(var(--rot)) scale(0.985);
+			transition-duration: 90ms;
+		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.folder,
