@@ -145,15 +145,72 @@
 	let barTimer: ReturnType<typeof setTimeout>;
 	let isBarHovered = $state(false);
 
-	function wakeBar() {
-		barVisible = true;
+	// ---------- toolbar visibility & zen mode ----------
+	let toolbarHidden = $state(false);
+	let barScrolledAway = $state(false);
+	let lastScrollY = 0;
+	let scrollAcc = 0;
+
+	const isBarHidden = $derived(
+		toolbarHidden ||
+		(inFull && !barVisible) ||
+		(!inFull && barScrolledAway && !menu && !drawer && !penOpen && !editing)
+	);
+
+	function hideToolbar() {
+		toolbarHidden = true;
+		menu = false;
 		clearTimeout(barTimer);
-		if (inFull && !isBarHovered && !menu && !drawer && !penOpen && !editing) {
-			barTimer = setTimeout(() => {
-				if (!isBarHovered && !menu && !drawer && !penOpen && !editing) {
-					barVisible = false;
+	}
+
+	function showToolbar() {
+		toolbarHidden = false;
+		barScrolledAway = false;
+		barVisible = true;
+		wakeBar();
+	}
+
+	function toggleToolbarHidden() {
+		if (isBarHidden) showToolbar();
+		else hideToolbar();
+	}
+
+	function onWindowScroll() {
+		if (toolbarHidden || inFull) return;
+		const y = typeof window !== 'undefined' ? window.scrollY : 0;
+		const dy = y - lastScrollY;
+
+		if (y < 40) {
+			barScrolledAway = false;
+			scrollAcc = 0;
+		} else if (dy > 10) {
+			// Scrolling down on mobile/tablet: tuck the bar away
+			if (typeof window !== 'undefined' && window.innerWidth < 768) {
+				scrollAcc += dy;
+				if (scrollAcc > 35 && !menu && !drawer && !penOpen && !editing) {
+					barScrolledAway = true;
 				}
-			}, 3200);
+			}
+		} else if (dy < -6) {
+			// Scrolling up: reveal the bar
+			scrollAcc = 0;
+			barScrolledAway = false;
+		}
+		lastScrollY = y;
+	}
+
+	function wakeBar() {
+		if (toolbarHidden) return;
+		if (inFull) {
+			barVisible = true;
+			clearTimeout(barTimer);
+			if (!isBarHovered && !menu && !drawer && !penOpen && !editing) {
+				barTimer = setTimeout(() => {
+					if (!isBarHovered && !menu && !drawer && !penOpen && !editing) {
+						barVisible = false;
+					}
+				}, 3200);
+			}
 		}
 	}
 
@@ -224,6 +281,10 @@
 				penOpen = false;
 				return;
 			}
+			if (toolbarHidden) {
+				showToolbar();
+				return;
+			}
 			if (inFull) {
 				toggleFullscreen();
 				return;
@@ -236,6 +297,9 @@
 		if (e.key === 'f' || e.key === 'F') {
 			e.preventDefault();
 			toggleFullscreen();
+		} else if (e.key === 'z' || e.key === 'Z') {
+			e.preventDefault();
+			toggleToolbarHidden();
 		} else if (e.key === 'b') toggleEar();
 		else if (e.key === 't') drawer = drawer ? null : 'contents';
 		else if (e.key === 'h') togglePen();
@@ -255,6 +319,7 @@
 
 <svelte:window
 	onkeydown={onKey}
+	onscroll={onWindowScroll}
 	onpointerdown={(e) => {
 		wakeBar();
 		if (menu && !(e.target as HTMLElement).closest('.more')) menu = false;
@@ -266,11 +331,27 @@
 />
 
 <div class="read-container" class:immersive-mode={isImmersive}>
+{#if isBarHidden}
+	<button
+		class="bar-reveal-pill"
+		onclick={showToolbar}
+		aria-label="Show toolbar (page {cur + 1} of {n})"
+		title="Show toolbar (z)"
+	>
+		<span class="brp-icon" aria-hidden="true">
+			<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9" />
+			</svg>
+		</span>
+		<span class="brp-text">{cur + 1} / {n}</span>
+	</button>
+{/if}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
 	class="bar"
 	class:floating={inFull}
-	class:hidden={inFull && !barVisible}
+	class:hidden={isBarHidden}
 	onmouseenter={() => {
 		isBarHovered = true;
 		wakeBar();
@@ -387,6 +468,7 @@
 				<button role="menuitem" onclick={togglePen}>{penOpen ? 'Close highlighter' : 'Highlight & sticky notes'} <kbd>h</kbd></button>
 				<button role="menuitem" onclick={toggleNight}>{app.night ? 'Back to daylight' : '3 AM mode'} <kbd>m</kbd></button>
 				<button role="menuitem" onclick={toggleFullscreen}>{inFull ? 'Exit full screen' : 'Full screen reader'} <kbd>f</kbd></button>
+				<button role="menuitem" onclick={toggleToolbarHidden}>{isBarHidden ? 'Show toolbar' : 'Hide toolbar'} <kbd>z</kbd></button>
 				{#if doc.kind === 'slides'}
 					<button role="menuitem" onclick={() => { presentation = !presentation; menu = false; }}>{presentation ? 'Continuous scroll' : 'Presentation mode'} <kbd>p</kbd></button>
 				{:else}
@@ -406,6 +488,17 @@
 		<button class="pct" onclick={() => { viewer?.setZoom(1); wakeBar(); }} aria-label="Reset zoom">{zoomPct}%</button>
 		<button onclick={() => { viewer?.zoomBy(1.2); wakeBar(); }} aria-label="Zoom in">+</button>
 	</div>
+
+	<button
+		class="ib hide-bar-btn"
+		onclick={hideToolbar}
+		aria-label="Hide toolbar"
+		title="Hide toolbar (z)"
+	>
+		<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<polyline points="18 15 12 9 6 15" />
+		</svg>
+	</button>
 
 	<span class="tape" style:transform="scaleX({(cur + 1) / n})" aria-hidden="true"></span>
 </header>
@@ -541,6 +634,12 @@
 		padding: env(safe-area-inset-top) 8px 0 6px;
 		background: rgb(23 18 14 / 0.94);
 		border-bottom: 1px solid rgb(236 227 205 / 0.1);
+		transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+	}
+	.bar.hidden:not(.floating) {
+		transform: translateY(-100%);
+		opacity: 0;
+		pointer-events: none;
 	}
 	.bar.floating {
 		position: fixed;
@@ -565,9 +664,75 @@
 		pointer-events: none;
 	}
 	@media (prefers-reduced-motion: reduce) {
+		.bar,
 		.bar.floating {
 			transition: none;
 		}
+	}
+
+	.bar-reveal-pill {
+		position: fixed;
+		top: max(8px, env(safe-area-inset-top));
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 65;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 14px;
+		font-family: var(--mono);
+		font-size: 12px;
+		color: var(--paper);
+		background: rgb(23 18 14 / 0.88);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+		border: 1px solid rgb(236 227 205 / 0.22);
+		border-radius: 9999px;
+		box-shadow:
+			0 6px 20px rgb(0 0 0 / 0.45),
+			0 0 0 1px rgb(236 227 205 / 0.08);
+		cursor: pointer;
+		touch-action: manipulation;
+		transition: opacity 180ms ease, transform 180ms ease, background 150ms ease;
+		animation: pillFadeIn 200ms ease forwards;
+	}
+	@keyframes pillFadeIn {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -8px);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, 0);
+		}
+	}
+	.bar-reveal-pill:hover {
+		background: rgb(23 18 14 / 0.98);
+		border-color: rgb(236 227 205 / 0.4);
+		transform: translate(-50%, 2px);
+	}
+	.brp-icon {
+		display: grid;
+		place-items: center;
+		color: var(--pencil);
+		transition: transform 150ms ease;
+	}
+	.bar-reveal-pill:hover .brp-icon {
+		color: var(--paper);
+		transform: translateY(1px);
+	}
+	.brp-text {
+		letter-spacing: 0.05em;
+		font-weight: 500;
+	}
+
+	.ib.hide-bar-btn {
+		color: var(--pencil);
+		transition: transform 160ms ease, color 160ms ease;
+	}
+	.ib.hide-bar-btn:hover {
+		color: var(--paper);
+		transform: translateY(-1px);
 	}
 
 	.ib.dl, .ib.fs-btn {
