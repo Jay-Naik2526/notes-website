@@ -1,0 +1,2 @@
+# Files (relative to the notes folder) that must not appear on the site, one per line.
+CD/Compiler_Design_Ultimate_Notes.pdf

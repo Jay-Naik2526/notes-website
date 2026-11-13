@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": ["/lib/packs/*", "/_app/*", "/noise.png", "/robots.txt"]
+}

@@ -1,0 +1,8 @@
+{
+  "3DP": { "slug": "3dp", "name": "3D Printing",         "sub": "Additive manufacturing", "color": "#c2784f" },
+  "CD":  { "slug": "cd",  "name": "Compiler Design",    "sub": "Lexers to codegen",       "color": "#86a98a" },
+  "IVP": { "slug": "ivp", "name": "Image & Video Proc.", "sub": "Pixels, then motion",     "color": "#5c9a96" },
+  "OR":  { "slug": "or",  "name": "Operations Research", "sub": "Optimise everything",     "color": "#c98a8a" },
+  "OS":  { "slug": "os",  "name": "Operating Systems",   "sub": "Processes, memory, files","color": "#b9604a" },
+  "SE":  { "slug": "se",  "name": "Software Engineering","sub": "SDLC and friends",        "color": "#d9a441" }
+}

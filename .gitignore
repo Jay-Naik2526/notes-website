@@ -1,0 +1,30 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Generated notes (page images, PDFs, extracted text): large, and course material. Rebuilt locally with `npm run library`
+/static/lib
+
+# Local tooling and caches
+/.cache
+/.claude

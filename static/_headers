@@ -1,0 +1,23 @@
+/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+
+/_app/immutable/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/lib/packs/*
+  Cache-Control: public, max-age=86400
+  Accept-Ranges: bytes
+
+/lib/docs/*
+  Cache-Control: public, max-age=3600
+
+/lib/text/*
+  Cache-Control: public, max-age=3600
+
+/lib/library.json
+  Cache-Control: public, max-age=300
+
+/noise.png
+  Cache-Control: public, max-age=31536000, immutable
